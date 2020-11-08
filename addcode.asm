@@ -1,8 +1,8 @@
 .ORIG x3000
 
 LEA R0, START
-LDW R0, R0, #0 ; get xC000 in R0
 LDW R3, R0, #1 ; get #20 in R3
+LDW R0, R0, #0 ; get xC000 in R0
 AND R2, R2, #0 ; clear R2 (sum)
 
 LOOP LDB R1, R0, #0 ; R1 = addr of byte
