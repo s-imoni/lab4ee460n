@@ -244,12 +244,17 @@ void help() {
 /***************************************************************/
 void cycle() {                                                
 
+  if(CYCLE_COUNT == 300){
+    CURRENT_LATCHES.INTV = 0x01;
+    CURRENT_LATCHES.INTERRUPT = 0x01;
+  }
   eval_micro_sequencer();   
   cycle_memory();
   eval_bus_drivers();
   drive_bus();
   latch_datapath_values();
-  NEXT_LATCHES.PSR = Low16bits(NEXT_LATCHES.PSR + (NEXT_LATCHES.N << 2) + (NEXT_LATCHES.Z << 1) + (NEXT_LATCHES.P));
+  NEXT_LATCHES.PSR = Low16bits((NEXT_LATCHES.PSR & 0xFFF8) + (NEXT_LATCHES.N << 2) + (NEXT_LATCHES.Z << 1) + (NEXT_LATCHES.P));
+  printf("%x\n", NEXT_LATCHES.PSR);
   CURRENT_LATCHES = NEXT_LATCHES;
 
   CYCLE_COUNT++;
@@ -679,6 +684,8 @@ void eval_micro_sequencer() {
     // get exception
     int exc = CURRENT_LATCHES.EXC;
 
+    printf("%d", j);
+
     if(ird == 1){
         NEXT_LATCHES.STATE_NUMBER = opcode & 0x0F;
     }
@@ -703,7 +710,8 @@ void eval_micro_sequencer() {
                 break;
             case 4:
                 if(interrupt == 1){
-                    j |= 8;
+                    j |= 12;
+                    NEXT_LATCHES.INTERRUPT = 0;
                 }
                 break;
             case 5:
@@ -722,11 +730,6 @@ void eval_micro_sequencer() {
         NEXT_LATCHES.STATE_NUMBER = j & 0x3F;
     }
 
-    
-    printf("current: %x\n", CURRENT_LATCHES.PC);
-    printf("next: %x\n", NEXT_LATCHES.PC);
-    printf("currentstate: %d\n", CURRENT_LATCHES.STATE_NUMBER);
-    printf("next: %d\n", NEXT_LATCHES.STATE_NUMBER);
     // get next microinstruction
     //for(int i = 0; i < CONTROL_STORE_BITS; i++){
     //    printf("%x", CONTROL_STORE[CURRENT_LATCHES.STATE_NUMBER][i]);
@@ -815,7 +818,6 @@ int saveAddrResultforPCMUX = 0;
 int R6MINUXtoBUS = 0;
 int R6PLUStoBUS = 0;
 int PCMINUStoBUS = 0;
-int VECTORtoBUS = 0;
 int SSPtoBUS = 0;
 int PSRtoBUS = 0;
 int VECTORSHIFTEDtoBUS = 0;
@@ -989,19 +991,6 @@ void eval_bus_drivers() {
    SSPtoBUS = Low16bits(CURRENT_LATCHES.SSP - 2);
    // PSR
    PSRtoBUS = Low16bits(CURRENT_LATCHES.PSR);
-   // Vector
-   int vecmux = GetVECMUX(CURRENT_LATCHES.MICROINSTRUCTION);
-   switch(vecmux){
-        case 0:
-            VECTORtoBUS = Low16bits(0x4);
-            break;
-        case 1:
-            VECTORtoBUS = Low16bits(CURRENT_LATCHES.INTV);
-            break;
-        case 2:
-            VECTORtoBUS = Low16bits(CURRENT_LATCHES.EXCV);
-            break;
-   }
    // Vector LSHF
    VECTORSHIFTEDtoBUS = Low16bits( (0x0200) + ((CURRENT_LATCHES.VECTOR & 0x0FF) << 1)) ;
 }
@@ -1020,7 +1009,6 @@ void drive_bus() {
    int gateMDR = GetGATE_MDR(CURRENT_LATCHES.MICROINSTRUCTION);
    int gatePCminus = GetGATE_PCMINUS2(CURRENT_LATCHES.MICROINSTRUCTION);
    int gateVECSHF = GetGATE_VECSHF(CURRENT_LATCHES.MICROINSTRUCTION);
-   int gateVEC = GetGATE_VECTOR(CURRENT_LATCHES.MICROINSTRUCTION);
    int gatePSR = GetGATE_PSR(CURRENT_LATCHES.MICROINSTRUCTION);
    int gateR6plus = GetGATE_R6PLUS2(CURRENT_LATCHES.MICROINSTRUCTION);
    int gateR6minus = GetGATE_R6MINUS2(CURRENT_LATCHES.MICROINSTRUCTION);
@@ -1056,9 +1044,6 @@ void drive_bus() {
    }
    else if(gateSSP == 1){
         BUS = Low16bits(SSPtoBUS);
-   }
-   else if(gateVEC == 1){
-        BUS = Low16bits(VECTORtoBUS);
    }
    else if(gateVECSHF == 1){
         BUS = Low16bits(VECTORSHIFTEDtoBUS);
@@ -1096,40 +1081,24 @@ void latch_datapath_values() {
         setcc(BUS);
    }
    if(ldben == 1){
-        printf("ldben\n");
         int irn = CURRENT_LATCHES.N & ((CURRENT_LATCHES.IR & 0x0800) >> 11);
         int irz = CURRENT_LATCHES.Z & ((CURRENT_LATCHES.IR & 0x0400) >> 10);
         int irp = CURRENT_LATCHES.P & ((CURRENT_LATCHES.IR & 0x0200) >> 9);
         NEXT_LATCHES.BEN = (irn | irz) | irp;
    }
    if(ldmdr == 1){
-        printf("ldmdr\n");
         int mioen = GetMIO_EN(CURRENT_LATCHES.MICROINSTRUCTION);
-        int mar0 = CURRENT_LATCHES.MAR & 0x01;
-        int sr1 = GetSR1MUX(CURRENT_LATCHES.MICROINSTRUCTION);
-        int regval = 0;
-        switch(sr1){
-            case 0:
-                // get IR 11:9
-                regval = CURRENT_LATCHES.REGS[(CURRENT_LATCHES.IR & 0x0E00) >> 9];
-                break;
-            case 1:
-                // get IR 8:6
-                regval = CURRENT_LATCHES.REGS[(CURRENT_LATCHES.IR & 0x01C0) >> 6];
-                break;
-            case 2:
-                regval = CURRENT_LATCHES.REGS[6];
-        }
+        int datasize = GetDATA_SIZE(CURRENT_LATCHES.MICROINSTRUCTION);
         switch(mioen){
                 // load from bus
             case 0:
-                if(mar0 == 1){
+                if(datasize == 0){
                     // store 7:0 7:0 in mdr
-                    NEXT_LATCHES.MDR = Low16bits( (regval & 0x0FF) | ((regval & 0x0FF) << 8) );
+                    NEXT_LATCHES.MDR = Low16bits( (BUS & 0x0FF) | ((BUS & 0x0FF) << 8) );
                 }
-                else if(mar0 == 0){
+                else if(datasize == 1){
                     // store 15:0 in mdr
-                    NEXT_LATCHES.MDR = Low16bits(regval);
+                    NEXT_LATCHES.MDR = Low16bits(BUS);
                 }
                 break;
             case 1:
@@ -1140,11 +1109,9 @@ void latch_datapath_values() {
 
    }
    if(ldmar == 1){
-        printf("ldmar\n");
         NEXT_LATCHES.MAR = Low16bits(BUS);
    }
    if(ldpc == 1){
-        printf("ldpc\n");
         int pcmux = GetPCMUX(CURRENT_LATCHES.MICROINSTRUCTION);
         switch(pcmux){
             case 0:
@@ -1162,11 +1129,9 @@ void latch_datapath_values() {
         }
    }
    if(ldir == 1){
-        printf("ldir\n");
         NEXT_LATCHES.IR = Low16bits(BUS);
    }
    if(ldreg == 1){
-        printf("ldreg\n");
         int regmux = GetREGMUX(CURRENT_LATCHES.MICROINSTRUCTION);
         int regvalue = 0;
         switch(regmux){
@@ -1195,29 +1160,43 @@ void latch_datapath_values() {
    }
    if(ldexcv == 1){
         printf("ldexcvector\n");
-        int datasize = GetDATA_SIZE(CURRENT_LATCHES.MICROINSTRUCTION);
-        if(BUS & 0x01 != 0 && datasize == 1){
+        int lshf = GetLSHF1(CURRENT_LATCHES.MICROINSTRUCTION);
+        int pcgate = GetGATE_PC(CURRENT_LATCHES.MICROINSTRUCTION);
+
+        printf("%d\n", lshf);
+        NEXT_LATCHES.EXCV = Low16bits(0);
+        if(BUS & 0x01 != 0 &&  lshf == 1){
             NEXT_LATCHES.EXCV = Low16bits(3);
         }
-        else if((CURRENT_LATCHES.PSR & 0x8000 != 0) && (Low16bits(BUS) < 0x3000)){
-            NEXT_LATCHES.EXCV = Low16bits(2);
+        if(BUS & 0x01 != 0 && pcgate == 1){
+            NEXT_LATCHES.EXCV = Low16bits(3);
         }
-        else{
-            NEXT_LATCHES.EXCV = Low16bits(0);
+        // replace if protection also occurs
+        if(((CURRENT_LATCHES.PSR & 0x8000) != 0) && (Low16bits(BUS) < 0x3000)){
+            NEXT_LATCHES.EXCV = Low16bits(2);
         }
    }
    if(ldexc == 1){
-        printf("ldexc\n");
         if (NEXT_LATCHES.EXCV != 0){
             NEXT_LATCHES.EXC = Low16bits(1);
         }
         else{
             NEXT_LATCHES.EXC = Low16bits(0);
-        } 
+        }
    }
    if(ldvector == 1){
-        printf("ldvector\n");
-        NEXT_LATCHES.VECTOR = Low16bits(BUS);
+        int vecmux = GetVECMUX(CURRENT_LATCHES.MICROINSTRUCTION);
+        switch(vecmux){
+            case 0:
+                NEXT_LATCHES.VECTOR = Low16bits(0x4);
+                break;
+            case 1:
+                NEXT_LATCHES.VECTOR = Low16bits(CURRENT_LATCHES.INTV);
+                break;
+            case 2:
+                NEXT_LATCHES.VECTOR = Low16bits(CURRENT_LATCHES.EXCV);
+                break;
+        }
     
    }
    if(ldpsr15 == 1){
@@ -1227,20 +1206,20 @@ void latch_datapath_values() {
                 NEXT_LATCHES.PSR = Low16bits(0);
                 break;
             case 1:
-                NEXT_LATCHES.PSR = Low16bits(1);
+                NEXT_LATCHES.PSR = Low16bits(0x8000);
                 break;
         }
    }
    if(ldpsr == 1){
-        printf("ldpsr\n");
         NEXT_LATCHES.PSR = Low16bits(BUS);
+        NEXT_LATCHES.N = Low16bits((BUS & 0x4) >> 2);
+        NEXT_LATCHES.Z = Low16bits((BUS & 0x2) >> 1);
+        NEXT_LATCHES.P = Low16bits((BUS & 0x1));
    }
    if(ldssp == 1){
-        printf("ldssp\n");
         NEXT_LATCHES.SSP = Low16bits(CURRENT_LATCHES.REGS[6] + 2);
    }
    if(ldusp == 1){
-        printf("uspld\n");
         NEXT_LATCHES.USP = Low16bits(CURRENT_LATCHES.REGS[6]);
    }
 

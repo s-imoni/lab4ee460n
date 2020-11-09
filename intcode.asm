@@ -6,8 +6,9 @@ STW R1 R6 #-2
 
 LEA R0, INC
 LDW R1, R0, #0 ; m[x4000] in R1
-ADD R1, R1, #1
-STW R1, R0, #0 ; R1 to m[x4000]
+AND R0, R0, #0
+ADD R0, R0, #1
+STW R0, R1, #0 ; R1 to m[x4000]
 
 ; reloading registers
 LDW R1 R6 #-2
