@@ -254,7 +254,6 @@ void cycle() {
   drive_bus();
   latch_datapath_values();
   NEXT_LATCHES.PSR = Low16bits((NEXT_LATCHES.PSR & 0xFFF8) + (NEXT_LATCHES.N << 2) + (NEXT_LATCHES.Z << 1) + (NEXT_LATCHES.P));
-  printf("%x\n", NEXT_LATCHES.PSR);
   CURRENT_LATCHES = NEXT_LATCHES;
 
   CYCLE_COUNT++;
