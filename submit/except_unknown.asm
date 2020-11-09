@@ -1,0 +1,3 @@
+.ORIG 0x1C00
+.FILL 0xF025
+.END
