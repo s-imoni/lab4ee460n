@@ -1159,11 +1159,9 @@ void latch_datapath_values() {
 
    }
    if(ldexcv == 1){
-        printf("ldexcvector\n");
         int lshf = GetLSHF1(CURRENT_LATCHES.MICROINSTRUCTION);
         int pcgate = GetGATE_PC(CURRENT_LATCHES.MICROINSTRUCTION);
 
-        printf("%d\n", lshf);
         NEXT_LATCHES.EXCV = Low16bits(0);
         if(BUS & 0x01 != 0 &&  lshf == 1){
             NEXT_LATCHES.EXCV = Low16bits(3);
