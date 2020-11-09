@@ -684,8 +684,6 @@ void eval_micro_sequencer() {
     // get exception
     int exc = CURRENT_LATCHES.EXC;
 
-    printf("%d", j);
-
     if(ird == 1){
         NEXT_LATCHES.STATE_NUMBER = opcode & 0x0F;
     }
